@@ -136,22 +136,17 @@ print("-" * 80)
 # We identify columns using keywords rather than hard-coding
 # a fixed list of variables.
 
-rating_keywords = [
-    "rating",
-    "score",
-    "likelihood",
-    "intent",
-    "familiarity"
-]
+# Identify numeric survey columns whose observed values
+# are entirely within the 1-5 Likert scale.
 
-rating_columns = [
-    column
-    for column in df.columns
-    if any(
-        keyword in column.lower()
-        for keyword in rating_keywords
-    )
-]
+rating_columns = []
+
+for column in numeric_columns:
+
+    values = df[column].dropna()
+
+    if len(values) > 0 and values.between(1, 5).all():
+        rating_columns.append(column)
 
 print(
     f"Potential rating columns identified : "
@@ -249,9 +244,90 @@ if rating_columns:
         .to_string()
     )
 
+# =========================================================
+# 7. RATING DISTRIBUTION ANALYSIS
+# =========================================================
+
+print("\n7. RATING DISTRIBUTION ANALYSIS")
+print("-" * 80)
+
+if rating_columns:
+
+    for column in rating_columns:
+
+        distribution = (
+            df[column]
+            .value_counts()
+            .sort_index()
+        )
+
+        percentages = (
+            df[column]
+            .value_counts(normalize=True)
+            .sort_index()
+            * 100
+        )
+
+        print(f"\n{column}")
+
+        distribution_table = pd.DataFrame({
+            "count": distribution,
+            "percentage": percentages.round(2)
+        })
+
+        print(
+            distribution_table.to_string()
+        )
+# =========================================================
+# 8. UNIFORMITY CHECK
+# =========================================================
+
+from scipy.stats import chisquare
+
+
+print("\n8. UNIFORMITY CHECK")
+print("-" * 80)
+
+uniformity_results = []
+
+for column in rating_columns:
+
+    observed = (
+        df[column]
+        .value_counts()
+        .reindex([1, 2, 3, 4, 5], fill_value=0)
+        .values
+    )
+
+    expected_count = len(df) / 5
+
+    expected = np.repeat(
+        expected_count,
+        5
+    )
+
+    chi2_stat, p_value = chisquare(
+        observed,
+        f_exp=expected
+    )
+
+    uniformity_results.append({
+        "column": column,
+        "chi_square": chi2_stat,
+        "p_value": p_value
+    })
+
+    print(f"\n{column}")
+    print(f"Chi-square : {chi2_stat:.4f}")
+    print(f"P-value    : {p_value:.6f}")
+
+
+uniformity_df = pd.DataFrame(
+    uniformity_results
+)
 
 # =========================================================
-# 7. CREATE COLUMN-LEVEL QUALITY REPORT
+# 9. CREATE COLUMN-LEVEL QUALITY REPORT
 # =========================================================
 
 quality_report = pd.DataFrame({
@@ -268,7 +344,7 @@ quality_report = pd.DataFrame({
 
 
 # =========================================================
-# 8. SAVE REPORT
+# 10. SAVE REPORT
 # =========================================================
 
 OUTPUT_PATH.parent.mkdir(
